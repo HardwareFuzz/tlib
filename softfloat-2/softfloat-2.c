@@ -3258,14 +3258,35 @@ float16 float64_to_float16(float64 a, flag ieee STATUS_PARAM)
     aSign = extractFloat64Sign(a);
     if(aExp == 0x7FF) {
         if(aFrac) {
-            return commonNaNToFloat16(float64ToCommonNaN(a STATUS_VAR) STATUS_VAR);  //  NaN
+            commonNaNT nan = float64ToCommonNaN(a STATUS_VAR);
+            if(!ieee) {
+                float_raise(float_flag_invalid STATUS_VAR);
+                return packFloat16(aSign, 0, 0);
+            }
+            return commonNaNToFloat16(nan STATUS_VAR);
         }
-        return packFloat16(aSign, 0xFF, 0);  //  Infinity
+        if(!ieee) {
+            float_raise(float_flag_invalid STATUS_VAR);
+            return packFloat16(aSign, 0x1f, 0x3ff);
+        }
+        return packFloat16(aSign, 0x1f, 0);
     }
-    if(aExp > 0x40F) {
-        return packFloat16(aSign, 0xFF, 0);  //  Infinity
+    if(aExp == 0 && aFrac == 0) {
+        return packFloat16(aSign, 0, 0);
     }
-    return packFloat16(aSign, aExp | ((aExp & 0x400) >> 6), aFrac >> 42);
+
+    /* Keep a sticky bit below FP16's rounding position, without first
+     * rounding to FP32. Exponents outside FP32's normal range have the
+     * same FP16 overflow/underflow result and can be clamped safely.
+     * Keeping the intermediate normal also avoids spurious input flush.
+     */
+    if(aExp < 0x381) {
+        aExp = 0x381;
+    } else if(aExp > 0x47e) {
+        aExp = 0x47e;
+    }
+    shift64RightJamming(aFrac, 29, &aFrac);
+    return float32_to_float16(packFloat32(aSign, aExp - 0x380, aFrac), ieee STATUS_VAR);
 }
 
 /*----------------------------------------------------------------------------
