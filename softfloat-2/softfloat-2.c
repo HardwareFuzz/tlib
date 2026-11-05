@@ -3136,6 +3136,7 @@ float32 float16_to_float32(float16 a, flag ieee STATUS_PARAM)
 float16 float32_to_float16(float32 a, flag ieee STATUS_PARAM)
 {
     flag aSign;
+    flag inexact;
     int16 aExp;
     uint32_t aSig;
     uint32_t mask;
@@ -3183,9 +3184,9 @@ float16 float32_to_float16(float32 a, flag ieee STATUS_PARAM)
     } else {
         mask = 0x00001fff;
     }
-    if(aSig & mask) {
+    inexact = (aSig & mask) != 0;
+    if(inexact) {
         flag isTiny = aExp < -14;
-        float_raise(float_flag_inexact STATUS_VAR);
         roundingMode = STATUS(float_rounding_mode);
         switch(roundingMode) {
             case float_round_nearest_even:
@@ -3227,9 +3228,12 @@ float16 float32_to_float16(float32 a, flag ieee STATUS_PARAM)
         }
     } else {
         if(aExp > 16) {
-            float_raise(float_flag_invalid | float_flag_inexact STATUS_VAR);
+            float_raise(float_flag_invalid STATUS_VAR);
             return packFloat16(aSign, 0x1f, 0x3ff);
         }
+    }
+    if(inexact) {
+        float_raise(float_flag_inexact STATUS_VAR);
     }
     if(aExp < -24) {
         return packFloat16(aSign, 0, 0);
